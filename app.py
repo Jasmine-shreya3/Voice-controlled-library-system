@@ -1,153 +1,235 @@
+import streamlit as st
 import speech_recognition as sr
+import io
 
 # ---------------------------
-# Simple Library Storage
+# Page Configuration
 # ---------------------------
-library = {}
+st.set_page_config(
+    page_title="Voice Controlled Library",
+    page_icon="📚",
+    layout="centered"
+)
 
 # ---------------------------
-# Speech Recognition Function
+# Library Storage
 # ---------------------------
-def listen():
+if "library" not in st.session_state:
+    st.session_state.library = {}
+
+library = st.session_state.library
+
+
+# ---------------------------
+# Voice Recognition
+# ---------------------------
+def recognize_audio(audio_file):
     recognizer = sr.Recognizer()
 
     try:
-        with sr.Microphone() as source:
-            print("\n🎤 Listening...")
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            audio = recognizer.listen(source, timeout=5)
+        audio_bytes = audio_file.getvalue()
 
-        command = recognizer.recognize_google(audio)
-        command = command.lower().strip()
+        audio_source = sr.AudioFile(io.BytesIO(audio_bytes))
 
-        print("🗣 You said:", command)
-        return command
+        with audio_source as source:
+            audio_data = recognizer.record(source)
 
-    except sr.WaitTimeoutError:
-        print("⌛ No speech detected.")
-        return ""
+        command = recognizer.recognize_google(audio_data)
+
+        return command.lower().strip()
 
     except sr.UnknownValueError:
-        print("❌ Could not understand your voice.")
+        st.error("❌ Sorry, I could not understand the audio.")
         return ""
 
     except sr.RequestError:
-        print("❌ Internet connection required for speech recognition.")
+        st.error("❌ Speech recognition service is unavailable.")
         return ""
+
+    except Exception as e:
+        st.error(f"⚠️ Error: {e}")
+        return ""
+
 
 # ---------------------------
 # Add Book
 # ---------------------------
-def add_book():
-    print("📚 Say the book title.")
+def add_book(title):
+    title = title.title()
 
-    title = listen()
+    if title in library:
+        return f"⚠️ '{title}' already exists."
 
-    if title:
-        title = title.title()
+    library[title] = "Available"
+    return f"✅ '{title}' added successfully."
 
-        if title in library:
-            print("⚠ Book already exists.")
-        else:
-            library[title] = "Available"
-            print(f"✅ '{title}' added successfully.")
 
 # ---------------------------
 # Borrow Book
 # ---------------------------
-def borrow_book():
-    print("📖 Say the book title to borrow.")
+def borrow_book(title):
+    title = title.title()
 
-    title = listen().title()
+    if title not in library:
+        return "❌ Book not found."
 
-    if title in library:
-        if library[title] == "Available":
-            library[title] = "Borrowed"
-            print(f"📕 You borrowed '{title}'.")
-        else:
-            print("❌ Book already borrowed.")
-    else:
-        print("❌ Book not found.")
+    if library[title] == "Borrowed":
+        return "❌ Book is already borrowed."
+
+    library[title] = "Borrowed"
+    return f"📕 You borrowed '{title}'."
+
 
 # ---------------------------
 # Return Book
 # ---------------------------
-def return_book():
-    print("📘 Say the book title to return.")
+def return_book(title):
+    title = title.title()
 
-    title = listen().title()
+    if title not in library:
+        return "❌ Book not found."
 
-    if title in library:
-        library[title] = "Available"
-        print(f"✅ '{title}' returned successfully.")
-    else:
-        print("❌ Book not found.")
+    library[title] = "Available"
+    return f"✅ '{title}' returned successfully."
 
-# ---------------------------
-# Show Books
-# ---------------------------
-def show_books():
-    print("\n========== LIBRARY ==========")
-
-    if not library:
-        print("No books available.")
-        return
-
-    for book, status in library.items():
-        print(f"{book}  -->  {status}")
 
 # ---------------------------
-# Main Program
+# Main UI
 # ---------------------------
-def main():
+st.title("🎙️ Voice Controlled Library System")
 
-    print("=" * 45)
-    print("🎙 VOICE CONTROLLED LIBRARY SYSTEM")
-    print("=" * 45)
+st.write(
+    "Manage your library using voice commands."
+)
 
-    print("🔐 Say the password.")
+st.divider()
 
-    password = listen()
+# ---------------------------
+# Authentication
+# ---------------------------
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
-    if password not in ["1234", "one two three four"]:
-        print("❌ Wrong password.")
-        return
+if not st.session_state.authenticated:
 
-    print("\n✅ Access Granted!")
+    st.subheader("🔐 Voice Authentication")
 
-    while True:
+    st.info("Say the password: 1234")
 
-        print("\nAvailable Commands")
-        print("------------------")
-        print("• Add Book")
-        print("• Borrow Book")
-        print("• Return Book")
-        print("• Show Books")
-        print("• Exit")
+    audio = st.audio_input("🎤 Record Password")
 
-        command = listen()
+    if audio:
 
-        if "add" in command:
-            add_book()
+        password = recognize_audio(audio)
 
-        elif "borrow" in command:
-            borrow_book()
-
-        elif "return" in command:
-            return_book()
-
-        elif "show" in command:
-            show_books()
-
-        elif "exit" in command:
-            print("👋 Thank you for using the Voice Controlled Library System.")
-            break
+        if password in ["1234", "one two three four"]:
+            st.session_state.authenticated = True
+            st.success("✅ Access Granted!")
+            st.rerun()
 
         else:
-            print("⚠ Command not recognized.")
+            st.error("❌ Wrong password.")
+
+    st.stop()
+
 
 # ---------------------------
-# Run Program
+# Main Library
 # ---------------------------
-if __name__ == "__main__":
-    main()
+st.success("🔓 Access Granted")
+
+st.subheader("🎤 Voice Command")
+
+st.write("Try commands such as:")
+
+st.code(
+    "Add book Python Programming\n"
+    "Borrow book Python Programming\n"
+    "Return book Python Programming\n"
+    "Show books"
+)
+
+audio = st.audio_input("🎙️ Record your command")
+
+if audio:
+
+    command = recognize_audio(audio)
+
+    if command:
+
+        st.write("🗣️ You said:", command)
+
+        # Show books
+        if "show" in command or "display" in command:
+            if library:
+                st.subheader("📚 Library")
+
+                for book, status in library.items():
+                    st.write(f"**{book}** → {status}")
+
+            else:
+                st.info("📚 No books in the library.")
+
+        # Add book
+        elif "add" in command:
+
+            title = command.replace("add book", "").replace("add", "").strip()
+
+            if title:
+                st.success(add_book(title))
+            else:
+                st.warning("Please say the book title.")
+
+        # Borrow book
+        elif "borrow" in command:
+
+            title = command.replace("borrow book", "").replace("borrow", "").strip()
+
+            if title:
+                st.success(borrow_book(title))
+            else:
+                st.warning("Please say the book title.")
+
+        # Return book
+        elif "return" in command:
+
+            title = command.replace("return book", "").replace("return", "").strip()
+
+            if title:
+                st.success(return_book(title))
+            else:
+                st.warning("Please say the book title.")
+
+        # Exit / logout
+        elif "exit" in command or "logout" in command:
+
+            st.session_state.authenticated = False
+            st.rerun()
+
+        else:
+            st.warning("⚠️ Command not recognized.")
+
+
+# ---------------------------
+# Current Library
+# ---------------------------
+st.divider()
+
+st.subheader("📖 Current Library")
+
+if library:
+
+    for book, status in library.items():
+        st.write(f"📘 **{book}** — {status}")
+
+else:
+    st.info("No books added yet.")
+
+
+# ---------------------------
+# Logout
+# ---------------------------
+if st.button("🔒 Logout"):
+
+    st.session_state.authenticated = False
+    st.rerun()
